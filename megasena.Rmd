@@ -1,0 +1,105 @@
+---
+title: "Mega-sena"
+author: "Maurício Collaça Ramos"
+date: "17 de agosto de 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+```
+
+# Price and Probabilities
+```{r}
+priceProbs <- data.frame(n = 6:15, val = c(3.50,24.5,98,294,735,1617,3234,6006,10510.50,17517.50),
+                         sena = 1/c(50063860,7151980,1787995,595998,238399,108363,54182,29175,16671,10003),
+                         quina = 1/c(154518,44981,17192,7791,3973,2211,1317,828,544,370),
+                         quadra = 1/c(2332,1038,539,312,195,129,90,65,48,37))
+priceProbs
+```
+
+# Download & Unzip
+```{r}
+library(XML)
+library(httr)
+url = "http://www1.caixa.gov.br/loterias/_arquivos/loterias/D_megase.zip"
+destfile = 'D_megase.zip'
+download.file(url, destfile, mode = "wb", cacheOK = FALSE)    
+unzip(destfile, setTimes = TRUE)
+```
+
+# Read messy data & set column names
+```{r}
+df1 <- readHTMLTable("D_MEGA.HTM", which = 1, encoding = "UTF-8", stringsAsFactors = FALSE, colClasses = "character")
+names(df1) <- c("concurso","dia","d1","d2","d3","d4","d5","d6","arrecadacao","ganhadores.sena","cidade","uf","rateio.sena", "ganhadores.quina", "rateio.quina", "ganhadores.quadra", "rateio.quadra", "acumulado", "valor.acumulado", "estimativa.premio", "acumulado.mega.virada")
+```
+
+# Clean and tidy data
+```{r}
+df1$cidade[!is.na(df1$cidade) & df1$cidade == "&nbsp"] <- ""
+df1$uf[!is.na(df1$uf) & df1$uf == "&nbsp"] <- ""
+df2 <- data.frame()
+master <- TRUE
+for (row in seq_len(nrow(df1))) {
+    if (is.na(suppressWarnings(as.numeric(df1[row, 1])))) {
+        if (master) {
+            df2[nrow(df2) + 1, "concurso"] <- df1[row - 1, "concurso"]
+            df2[nrow(df2), "cidade"] <- df1[row, "concurso"]
+            df2[nrow(df2), "uf"] <- df1[row, "dia"]
+            master <- FALSE
+        } else {
+            df2[nrow(df2) + 1, "concurso"] <- df2[nrow(df2), "concurso"]
+            df2[nrow(df2), "cidade"] <- df1[row, "concurso"]
+            df2[nrow(df2), "uf"] <- df1[row, "dia"]
+        }
+    } else if (df1[row, "uf"] != "") {
+        master <- TRUE
+        df2[nrow(df2) + 1, "concurso"] <- df1[row, "concurso"]
+        df2[nrow(df2), "cidade"] <- df1[row, "cidade"]
+        df2[nrow(df2), "uf"] <- df1[row, "uf"]
+    }
+}
+df1$cidade <- NULL
+df1$uf <- NULL
+df1 <- df1[!is.na(suppressWarnings(as.numeric(df1[, 1]))), ]
+row.names(df1)<-NULL
+```
+
+# Coerce data types
+```{r}
+df1$concurso <- as.integer(df1$concurso)
+df1$dia <- as.Date(df1$dia, "%d/%m/%Y")
+df1$d1 <- as.integer(df1$d1)
+df1$d2 <- as.integer(df1$d2)
+df1$d3 <- as.integer(df1$d3)
+df1$d4 <- as.integer(df1$d4)
+df1$d5 <- as.integer(df1$d5)
+df1$d6 <- as.integer(df1$d6)
+df1$arrecadacao <- as.numeric(sub(",",".",gsub("\\.","",df1$arrecadacao)))
+df1$ganhadores.sena <- as.integer(df1$ganhadores.sena)
+df1$rateio.sena <- as.numeric(sub(",",".",gsub("\\.","",df1$rateio.sena)))
+df1$ganhadores.quina <- as.integer(df1$ganhadores.quina)
+df1$rateio.quina <- as.numeric(sub(",",".",gsub("\\.","",df1$rateio.quina)))
+df1$ganhadores.quadra <- as.integer(df1$ganhadores.quadra)
+df1$rateio.quadra <- as.numeric(sub(",",".",gsub("\\.","",df1$rateio.quadra)))
+df1$acumulado <- ifelse(df1$acumulado == "SIM", TRUE, FALSE)
+df1$valor.acumulado <- as.numeric(sub(",",".",gsub("\\.","",df1$valor.acumulado)))
+df1$estimativa.premio <- as.numeric(sub(",",".",gsub("\\.","",df1$estimativa.premio)))
+df1$acumulado.mega.virada <- as.numeric(sub(",",".",gsub("\\.","",df1$acumulado.mega.virada)))
+df2$concurso <- as.integer(df2$concurso)
+```
+
+# Exploratory Data Analysis
+
+# Most frequent numbers
+```{r}
+df3 <- 
+    data.frame(d = c(df1[, 3], df1[, 4], df1[, 5], df1[, 6], df1[, 7], df1[, 8])) %>%
+    group_by(d) %>% summarise(freq = n()) %>% arrange(desc(freq))
+df3
+```
+```{r, fig.width=9}
+hist(x = c(df1[, 3], df1[, 4], df1[, 5], df1[, 6], df1[, 7], df1[, 8]), breaks = 0:60, include.lowest = FALSE)
+```
+
